@@ -1,8 +1,8 @@
 #Import required modules
 import subprocess,time,os,openpyxl,datetime
 
-emailId=""
-loginUrl=""
+emailId="<your email id>"
+loginUrl="<your login url>"
 
 def getUsername():
     dumpUser="Dump/username.txt"
