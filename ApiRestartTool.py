@@ -7,10 +7,9 @@ loginUrl="<your login url>"
 def getUsername():
     dumpUser="Dump/username.txt"
     subprocessCmd("echo %USERNAME% > "+dumpUser)
-    fileR = open(dumpUser,'r')
-    lines=fileR.read().splitlines()
-    psid=lines[0]
-    fileR.close()
+    with open(dumpUser,'r') as fileR:
+        lines=fileR.read().splitlines()
+        psid=lines[0]
     os.remove(dumpUser)
     print("******************************Welcome User "+str(psid)+"******************************"+"\n")
     return psid
@@ -19,32 +18,28 @@ def getUsername():
 def checkPar(par):
     print("Checking PAR credentials...")
     parCr=False
-    if(par=='""'):
+    if par in ['""', '" "']:
         return parCr
-    elif (par=='" "'):
-        return parCr
-    
     dumpPar="Dump/checkPar.txt"
     checkPar="cf login -a "+loginUrl+" -u "+emailId+" -p "+par+" >> "+dumpPar
     subprocessCmd(checkPar)
-    
-    fileR = open(dumpPar,'r')
-    lines=fileR.read().splitlines()
-    if(lines[2]=="OK"):
-        parCr=True
-    fileR.close()
+
+    with open(dumpPar,'r') as fileR:
+        lines=fileR.read().splitlines()
+        if(lines[2]=="OK"):
+            parCr=True
     os.remove(dumpPar)
-    
+
     return parCr
 
 #send commands to restart APIs
 def restartApi(instance,login,apiNames,apiInstances):
     commandString=login
-    for j in range(0,len(apiNames)):
+    for j in range(len(apiNames)):
         if(instance<apiInstances[j]):
             api=apiNames[j]
             commandString+=" & "+cmdRestart+" "+api+" "+str(instance)
-            
+
     subprocessCmd(commandString)
 
 #send commands to CLI tool 
@@ -53,44 +48,42 @@ def subprocessCmd(command):
     process.communicate()[0].strip() 
 	
 def getApiInstances(commandString,centre):
-	#send commands to get instances of apis
-	subprocessCmd(commandString)
-	
-	#check if APIs exist in data centre, if yes then get it's instance otherwise put in faultyApis list
-	faultyAPIs=[]
-	apiInstances=[]
-	apiExists=False
-	fileR = open(fileDump,'r')
-	lines=fileR.read().splitlines()
-	for n in range(0,len(lines)-1):
-		#if API found in data centre
-		if(lines[n].startswith("Showing") & lines[n+1].startswith("OK")):
-			apiExists=True
-			api=lines[n].split(" ")[6]
-			print("API "+api+" found in data centre "+centre)
-		#if API not found in data centre
-		elif(lines[n].startswith("Showing") & (not lines[n+1].startswith("OK"))):
-			apiExists=False
-			api=lines[n].split(" ")[6]
-			print("Some Error with API "+api)
-			api=api+"\n"
-			faultyAPIs.append(api)
-			apiInstances.append(0)
-		#if command failed because of some reason
-		elif(lines[n].startswith("FAILED")):
-			apiExists=False
-			api=lines[n+1].split(" ")[1]
-			print("API "+api+" not found in data centre "+centre)
-			api=api+"\n"
-			faultyAPIs.append(api)
-			apiInstances.append(0)
-			
-		if(apiExists==True):
-			if(lines[n].startswith("instances")):
-				apiInstances.append(int(lines[n].split(":")[1][1]))      
-	fileR.close()
-	os.remove(fileDump)
-	return faultyAPIs,apiInstances
+    #send commands to get instances of apis
+    subprocessCmd(commandString)
+
+    #check if APIs exist in data centre, if yes then get it's instance otherwise put in faultyApis list
+    faultyAPIs=[]
+    apiInstances=[]
+    apiExists=False
+    with open(fileDump,'r') as fileR:
+        lines=fileR.read().splitlines()
+        for n in range(len(lines)-1):
+            #if API found in data centre
+            if(lines[n].startswith("Showing") & lines[n+1].startswith("OK")):
+            	apiExists=True
+            	api=lines[n].split(" ")[6]
+            	print("API "+api+" found in data centre "+centre)
+            #if API not found in data centre
+            elif(lines[n].startswith("Showing") & (not lines[n+1].startswith("OK"))):
+            	apiExists=False
+            	api=lines[n].split(" ")[6]
+            	print("Some Error with API "+api)
+            	api=api+"\n"
+            	faultyAPIs.append(api)
+            	apiInstances.append(0)
+            #if command failed because of some reason
+            elif(lines[n].startswith("FAILED")):
+            	apiExists=False
+            	api=lines[n+1].split(" ")[1]
+            	print("API "+api+" not found in data centre "+centre)
+            	api=api+"\n"
+            	faultyAPIs.append(api)
+            	apiInstances.append(0)
+
+            if apiExists and (lines[n].startswith("instances")):
+                apiInstances.append(int(lines[n].split(":")[1][1]))
+    os.remove(fileDump)
+    return faultyAPIs,apiInstances
 	
 def restartInstanceWise(faultyAPIs,apiInstances,centre,apiNames,login,fileLog):
 	#proceed only if apis are in running state   
@@ -142,43 +135,40 @@ def restartInstanceWise(faultyAPIs,apiInstances,centre,apiNames,login,fileLog):
 #check if previous instance is restarted or not 
 def previousInstanceStatus(instance,login,apiNames,apiInstances,apisRestarted):
     print("Waiting for 100Secs for Instance-"+str(instance)+" of all APIs to go Up on PCF")
-    secs=100
-    while(secs>0):
+    for secs in range(100, 0, -5):
         print(str(secs)+" secs to go...")
         time.sleep(5)
-        secs=secs-5
     print("Checking status Of Instance-"+str(instance)+"\n")
     running=True
     commandString=login
-    for j in range(0,len(apiNames)):
+    for j in range(len(apiNames)):
         if(instance<apiInstances[j]):
             api=apiNames[j]
             commandString+=" & "+cmdStatus+" "+api+" >>"+fileDump
 
     subprocessCmd(commandString)
-    
-    fileR = open(fileDump,'r')
-    lines=fileR.read().splitlines()
-    for n in range(0,len(lines)):
-        if(n<len(lines)-1):
-            if(lines[n].startswith("Showing") & lines[n+1].startswith("OK")):
-                api=lines[n].split(" ")[6]
-            elif(lines[n].startswith("Showing") & (not lines[n+1].startswith("OK"))):
-                api=lines[n].split(" ")[6]
-                print("Some Error with API-"+api)
-                continue
-        if(lines[n].startswith("#")):
-            instanceApi=lines[n].split(" ")[0][1]
-            if(instanceApi==str(instance)):
-                status=lines[n].split(" ")[3]
-                if(status=="running"):
-                    print("Instance-"+str(instance)+" of API-"+api+" has been restarted...")
-                    api=api+"\n"
-                    apisRestarted.append(api)
-                elif(status!="running"):
-                    running=False
-                    print("**Instance-"+str(instance)+" of API-"+api+" has not restarted yet...")
-    fileR.close()
+
+    with open(fileDump,'r') as fileR:
+        lines=fileR.read().splitlines()
+        for n in range(len(lines)):
+            if(n<len(lines)-1):
+                if(lines[n].startswith("Showing") & lines[n+1].startswith("OK")):
+                    api=lines[n].split(" ")[6]
+                elif(lines[n].startswith("Showing") & (not lines[n+1].startswith("OK"))):
+                    api=lines[n].split(" ")[6]
+                    print("Some Error with API-"+api)
+                    continue
+            if (lines[n].startswith("#")):
+                instanceApi=lines[n].split(" ")[0][1]
+                if (instanceApi==str(instance)):
+                    status=lines[n].split(" ")[3]
+                    if (status=="running"):
+                        print("Instance-"+str(instance)+" of API-"+api+" has been restarted...")
+                        api=api+"\n"
+                        apisRestarted.append(api)
+                    else:
+                        running=False
+                        print("**Instance-"+str(instance)+" of API-"+api+" has not restarted yet...")
     os.remove(fileDump)
     return running
 
